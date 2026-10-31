@@ -12,5 +12,9 @@ The API listens on `http://localhost:4000`. Protected routes use `Authorization:
 - `POST /appointments/:id/reschedule` — revalidate and move a booking.
 - `PATCH /business` — update tenant business profile.
 - `GET /integrations/status` — honest local provider capabilities.
+- `POST /telephony/twilio/incoming` — signed Twilio inbound-call webhook returning TwiML.
+- `POST /telephony/twilio/language` — signed Twilio language-selection webhook.
+- `POST /telephony/twilio/respond` — signed Twilio booking-turn webhook.
+- `POST /telephony/twilio/calls` — authenticated outbound-call request using an E.164 `to` number.
 
 Errors use `{ "error": "message" }`. Dates supplied for rescheduling are ISO 8601 strings. Conversation date input uses `YYYY-MM-DD`; offered times come from the database and are displayed in Asia/Kolkata.

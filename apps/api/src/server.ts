@@ -1,4 +1,4 @@
-import Fastify, { type FastifyError, type FastifyRequest } from "fastify";
+import Fastify, { type FastifyError, type FastifyReply, type FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
 import bcrypt from "bcryptjs";
@@ -9,8 +9,12 @@ import { startConversation, handleMessage } from "./conversation.js";
 import { cancelAppointment, rescheduleAppointment } from "./scheduling.js";
 import { BrowserTelephonyProvider, LocalVoiceCapability, OllamaProvider } from "./providers.js";
 import { googleCalendarStatus } from "./google-calendar.js";
+import { createOutboundCall, incomingCallTwiml, respondTwiml, selectLanguageTwiml, twilioStatus, verifyTwilioRequest } from "./twilio.js";
 
 const app = Fastify({ logger: true });
+app.addContentTypeParser("application/x-www-form-urlencoded", { parseAs: "string" }, (_request, body, done) => {
+  done(null, Object.fromEntries(new URLSearchParams(String(body))));
+});
 await app.register(cors, { origin: true });
 await app.register(jwt, { secret: config.jwtSecret });
 
@@ -76,9 +80,32 @@ app.post("/conversations/:id/messages", async (request) => {
 });
 
 app.get("/integrations/status", async () => {
-  const [ollama, googleCalendar] = await Promise.all([new OllamaProvider().status(), googleCalendarStatus()]);
+  const [ollama, googleCalendar, telephone] = await Promise.all([new OllamaProvider().status(), googleCalendarStatus(), twilioStatus()]);
   const voice = new LocalVoiceCapability();
-  return { ollama, googleCalendar, speech: { EN: voice.capability("EN"), HI: voice.capability("HI"), OR: voice.capability("OR") }, telephony: new BrowserTelephonyProvider().capability(), messaging: { mode: "SIMULATED", delivered: false } };
+  return { ollama, googleCalendar, telephone, speech: { EN: voice.capability("EN"), HI: voice.capability("HI"), OR: voice.capability("OR") }, telephony: new BrowserTelephonyProvider().capability(), messaging: { mode: "SIMULATED", delivered: false } };
+});
+
+const twiml = (reply: FastifyReply, body: string) => reply.type("text/xml; charset=utf-8").send(body);
+const twilioGuard = async (request: FastifyRequest, reply: FastifyReply) => {
+  if (!verifyTwilioRequest(request)) return reply.code(403).send({ error: "Invalid Twilio signature" });
+};
+
+app.post("/telephony/twilio/incoming", { preHandler: [twilioGuard] }, async (_request, reply) => twiml(reply, await incomingCallTwiml()));
+
+app.post("/telephony/twilio/language", { preHandler: [twilioGuard] }, async (request, reply) => {
+  const { Digits = "1" } = request.body as { Digits?: string };
+  return twiml(reply, await selectLanguageTwiml(Digits));
+});
+
+app.post("/telephony/twilio/respond", { preHandler: [twilioGuard] }, async (request, reply) => {
+  const { sessionId, language } = z.object({ sessionId: z.string().uuid(), language: z.enum(["EN", "HI", "OR"]) }).parse(request.query);
+  return twiml(reply, await respondTwiml(sessionId, language, request.body as Record<string, string>));
+});
+
+app.post("/telephony/twilio/calls", { preHandler: [app.authenticate] }, async (request, reply) => {
+  const { to } = z.object({ to: z.string().regex(/^\+[1-9]\d{7,14}$/, "Use an international number such as +919876543210") }).parse(request.body);
+  reply.code(202);
+  return createOutboundCall(to);
 });
 
 app.get("/dashboard", { preHandler: [app.authenticate] }, async (request) => {

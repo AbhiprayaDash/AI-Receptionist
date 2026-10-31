@@ -10,11 +10,11 @@ type BookingState = {
 
 const interpolate = (value: string, vars: Record<string, string>) => Object.entries(vars).reduce((out, [key, val]) => out.replace(`{${key}}`, val), value);
 
-export async function startConversation(businessId: string, language: Language) {
-  const session = await db.conversationSession.create({ data: { businessId, language, state: { step: "NAME" } } });
+export async function startConversation(businessId: string, language: Language, channel = "TEXT") {
+  const session = await db.conversationSession.create({ data: { businessId, language, channel, state: { step: "NAME" } } });
   const message = `${copy[language].welcome}\n\n${copy[language].askName}`;
   await db.conversationMessage.create({ data: { sessionId: session.id, role: "assistant", content: message } });
-  return { sessionId: session.id, message, mode: "TEXT", speechValidated: false };
+  return { sessionId: session.id, message, mode: channel, speechValidated: false, nextStep: "NAME" as const };
 }
 
 export async function handleMessage(sessionId: string, content: string) {
@@ -64,10 +64,10 @@ export async function handleMessage(sessionId: string, content: string) {
       reply = interpolate(copy[language].confirm, { date: new Intl.DateTimeFormat(language === "HI" ? "hi-IN" : language === "OR" ? "or-IN" : "en-IN", { dateStyle: "long", timeStyle: "short", timeZone: "Asia/Kolkata" }).format(appointment.startsAt) });
       await db.conversationSession.update({ where: { id: sessionId }, data: { customerId: customer.id, status: "COMPLETED", state } });
       await db.conversationMessage.create({ data: { sessionId, role: "assistant", content: reply } });
-      return { message: reply, complete: true, appointmentId: appointment.id, notification: { message, manualUrl, status: "SIMULATED" } };
+      return { message: reply, complete: true, nextStep: "COMPLETE" as const, appointmentId: appointment.id, notification: { message, manualUrl, status: "SIMULATED" } };
     }
   }
   await db.conversationSession.update({ where: { id: sessionId }, data: { state } });
   await db.conversationMessage.create({ data: { sessionId, role: "assistant", content: reply } });
-  return { message: reply, complete: false };
+  return { message: reply, complete: false, nextStep: state.step };
 }
