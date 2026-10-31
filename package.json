@@ -6,13 +6,14 @@
   "scripts": {
     "dev": "concurrently -n api,web -c cyan,magenta \"npm run dev -w @receptionist/api\" \"npm run dev -w @receptionist/web\"",
     "build": "npm run build -w @receptionist/api && npm run build -w @receptionist/web",
-    "vercel-build": "npm run db:generate && npm run db:migrate && npm run db:seed && npm run build -w @receptionist/web",
+    "vercel-build": "npm run db:generate && npm run db:migrate && npm run db:seed && npm run integrations:check && npm run build -w @receptionist/web",
     "test": "npm run test -w @receptionist/api",
     "typecheck": "npm run typecheck -w @receptionist/api && npm run typecheck -w @receptionist/web",
     "db:generate": "prisma generate --schema packages/db/prisma/schema.prisma",
     "db:migrate": "prisma migrate deploy --schema packages/db/prisma/schema.prisma",
     "db:push": "prisma db push --schema packages/db/prisma/schema.prisma",
     "db:seed": "tsx packages/db/prisma/seed.ts",
+    "integrations:check": "node --import tsx scripts/check-integrations.ts",
     "setup": "npm run db:generate && npm run db:push && npm run db:seed"
   },
   "devDependencies": {
