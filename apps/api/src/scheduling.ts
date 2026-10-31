@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "./generated/prisma/client.js";
+import { removeAppointmentFromGoogle, syncAppointmentToGoogle } from "./google-calendar.js";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -45,7 +46,7 @@ export async function availableSlots(db: Db, input: { businessId: string; staffI
 export async function createAppointment(db: PrismaClient, input: {
   tenantId: string; businessId: string; customerId: string; staffId: string; serviceId: string; startsAt: Date;
 }) {
-  return db.$transaction(async (tx) => {
+  const appointment = await db.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.staffId}))`;
     const service = await tx.service.findFirst({ where: { id: input.serviceId, businessId: input.businessId, active: true } });
     if (!service) throw new Error("Service unavailable");
@@ -57,17 +58,28 @@ export async function createAppointment(db: PrismaClient, input: {
     const date = indiaDate(input.startsAt);
     const slots = await availableSlots(tx, { businessId: input.businessId, staffId: input.staffId, serviceId: input.serviceId, date });
     if (!slots.includes(input.startsAt.toISOString())) throw new Error("The selected time is outside current availability");
-    return tx.appointment.create({ data: { ...input, endsAt } });
+    return tx.appointment.create({
+      data: { ...input, endsAt },
+      include: { business: true, customer: true, service: true, staff: true },
+    });
   }, { isolationLevel: "Serializable" });
+  const calendar = await syncAppointmentToGoogle(appointment);
+  return { ...appointment, calendarSyncStatus: calendar.status };
 }
 
 export async function cancelAppointment(db: PrismaClient, tenantId: string, appointmentId: string) {
+  const appointment = await db.appointment.findFirst({
+    where: { id: appointmentId, tenantId, status: "CONFIRMED" },
+    include: { business: true, customer: true, service: true, staff: true },
+  });
+  if (!appointment) throw new Error("Appointment not found or already cancelled");
   const result = await db.appointment.updateMany({ where: { id: appointmentId, tenantId, status: "CONFIRMED" }, data: { status: "CANCELLED" } });
   if (!result.count) throw new Error("Appointment not found or already cancelled");
+  return removeAppointmentFromGoogle(appointment);
 }
 
 export async function rescheduleAppointment(db: PrismaClient, tenantId: string, appointmentId: string, startsAt: Date) {
-  return db.$transaction(async (tx) => {
+  const appointment = await db.$transaction(async (tx) => {
     const current = await tx.appointment.findFirst({ where: { id: appointmentId, tenantId, status: "CONFIRMED" } });
     if (!current) throw new Error("Appointment not found");
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${current.staffId}))`;
@@ -77,6 +89,12 @@ export async function rescheduleAppointment(db: PrismaClient, tenantId: string, 
     if (conflict) throw new Error("This slot is no longer available");
     const slots = await availableSlots(tx, { businessId: current.businessId, staffId: current.staffId, serviceId: current.serviceId, date: indiaDate(startsAt) });
     if (!slots.includes(startsAt.toISOString())) throw new Error("The selected time is outside current availability");
-    return tx.appointment.update({ where: { id: current.id }, data: { startsAt, endsAt } });
+    return tx.appointment.update({
+      where: { id: current.id },
+      data: { startsAt, endsAt },
+      include: { business: true, customer: true, service: true, staff: true },
+    });
   }, { isolationLevel: "Serializable" });
+  const calendar = await syncAppointmentToGoogle(appointment);
+  return { ...appointment, calendarSyncStatus: calendar.status };
 }

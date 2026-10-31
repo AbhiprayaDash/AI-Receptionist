@@ -37,7 +37,7 @@ docker compose --profile ai up -d ollama
 docker compose exec ollama ollama pull qwen2.5:1.5b
 ```
 
-The small Qwen model is suitable for CPU experiments, but multilingual quality varies and Odia should be evaluated with representative business conversations. Voice adapters are interfaces with text fallback; this repository does not claim tested Odia speech support.
+The small Qwen model is suitable for CPU experiments, but multilingual quality varies and Odia should be evaluated with representative business conversations. The browser receptionist supports microphone input and spoken replies where the browser provides Web Speech APIs; text remains the fallback and Odia speech is not claimed as validated.
 
 ## Offline and production boundaries
 

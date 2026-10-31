@@ -8,6 +8,7 @@ import { config } from "./config.js";
 import { startConversation, handleMessage } from "./conversation.js";
 import { cancelAppointment, rescheduleAppointment } from "./scheduling.js";
 import { BrowserTelephonyProvider, LocalVoiceCapability, OllamaProvider } from "./providers.js";
+import { googleCalendarStatus } from "./google-calendar.js";
 
 const app = Fastify({ logger: true });
 await app.register(cors, { origin: true });
@@ -75,9 +76,9 @@ app.post("/conversations/:id/messages", async (request) => {
 });
 
 app.get("/integrations/status", async () => {
-  const ollama = await new OllamaProvider().status();
+  const [ollama, googleCalendar] = await Promise.all([new OllamaProvider().status(), googleCalendarStatus()]);
   const voice = new LocalVoiceCapability();
-  return { ollama, speech: { EN: voice.capability("EN"), HI: voice.capability("HI"), OR: voice.capability("OR") }, telephony: new BrowserTelephonyProvider().capability(), messaging: { mode: "SIMULATED", delivered: false } };
+  return { ollama, googleCalendar, speech: { EN: voice.capability("EN"), HI: voice.capability("HI"), OR: voice.capability("OR") }, telephony: new BrowserTelephonyProvider().capability(), messaging: { mode: "SIMULATED", delivered: false } };
 });
 
 app.get("/dashboard", { preHandler: [app.authenticate] }, async (request) => {
@@ -104,8 +105,8 @@ app.get("/appointments", { preHandler: [app.authenticate] }, async (request) => 
 app.post("/appointments/:id/cancel", { preHandler: [app.authenticate] }, async (request) => {
   const claims = request.user as Claims;
   const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
-  await cancelAppointment(db, claims.tenantId, id);
-  return { status: "CANCELLED" };
+  const calendar = await cancelAppointment(db, claims.tenantId, id);
+  return { status: "CANCELLED", calendarSyncStatus: calendar.status };
 });
 
 app.post("/appointments/:id/reschedule", { preHandler: [app.authenticate] }, async (request) => {
