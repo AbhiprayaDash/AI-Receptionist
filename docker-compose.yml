@@ -1,0 +1,27 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: receptionist
+      POSTGRES_PASSWORD: receptionist
+      POSTGRES_DB: receptionist
+    ports:
+      - "5432:5432"
+    volumes:
+      - receptionist_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U receptionist -d receptionist"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ai"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - receptionist_ollama:/root/.ollama
+
+volumes:
+  receptionist_postgres:
+  receptionist_ollama:

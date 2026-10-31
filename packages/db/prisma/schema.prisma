@@ -1,0 +1,210 @@
+generator client {
+  provider   = "prisma-client"
+  output     = "../../../apps/api/src/generated/prisma"
+  engineType = "client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role { OWNER ADMIN STAFF }
+enum Language { EN HI OR }
+enum AppointmentStatus { CONFIRMED CANCELLED COMPLETED }
+enum NotificationStatus { SIMULATED PENDING SENT DELIVERED FAILED }
+enum ProviderKind { LOCAL_CALENDAR GOOGLE_CALENDAR MOCK_WHATSAPP WHATSAPP_CLOUD OLLAMA STT TTS TELEPHONY }
+
+model Tenant {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  createdAt DateTime @default(now())
+  users     Membership[]
+  business  Business?
+  auditLogs AuditLog[]
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime @default(now())
+  memberships  Membership[]
+}
+
+model Membership {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  userId   String @db.Uuid
+  role     Role   @default(STAFF)
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, userId])
+  @@index([userId])
+}
+
+model Business {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @unique @db.Uuid
+  name             String
+  address          String
+  phone            String
+  timezone         String   @default("Asia/Kolkata")
+  bufferMinutes    Int      @default(0)
+  greetingEnglish  String
+  greetingHindi    String
+  greetingOdia     String
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  staff            Staff[]
+  services         Service[]
+  customers        Customer[]
+  appointments     Appointment[]
+  workingHours     WorkingHours[]
+  holidays         Holiday[]
+  conversations    ConversationSession[]
+  notifications    Notification[]
+  integrations     IntegrationConfiguration[]
+  createdAt        DateTime @default(now())
+}
+
+model Staff {
+  id           String @id @default(uuid()) @db.Uuid
+  businessId   String @db.Uuid
+  name         String
+  active       Boolean @default(true)
+  business     Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+  @@index([businessId])
+}
+
+model Service {
+  id              String @id @default(uuid()) @db.Uuid
+  businessId      String @db.Uuid
+  name            String
+  durationMinutes Int
+  active          Boolean @default(true)
+  business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  appointments    Appointment[]
+  @@unique([businessId, name])
+}
+
+model Customer {
+  id            String   @id @default(uuid()) @db.Uuid
+  businessId    String   @db.Uuid
+  name          String
+  phone         String
+  language      Language @default(EN)
+  business      Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  appointments  Appointment[]
+  conversations ConversationSession[]
+  @@unique([businessId, phone])
+  @@index([businessId, name])
+}
+
+model Appointment {
+  id          String            @id @default(uuid()) @db.Uuid
+  tenantId    String            @db.Uuid
+  businessId  String            @db.Uuid
+  customerId  String            @db.Uuid
+  staffId     String            @db.Uuid
+  serviceId   String            @db.Uuid
+  startsAt    DateTime
+  endsAt      DateTime
+  status      AppointmentStatus @default(CONFIRMED)
+  notes       String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  business    Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer    Customer          @relation(fields: [customerId], references: [id])
+  staff       Staff             @relation(fields: [staffId], references: [id])
+  service     Service           @relation(fields: [serviceId], references: [id])
+  notifications Notification[]
+  @@index([tenantId, startsAt])
+  @@index([businessId, status, startsAt])
+  @@index([staffId, startsAt, endsAt])
+  @@unique([staffId, startsAt])
+}
+
+model WorkingHours {
+  id         String   @id @default(uuid()) @db.Uuid
+  businessId String   @db.Uuid
+  weekday    Int
+  startTime  String
+  endTime    String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  @@unique([businessId, weekday])
+}
+
+model Holiday {
+  id         String   @id @default(uuid()) @db.Uuid
+  businessId String   @db.Uuid
+  date       DateTime @db.Date
+  name       String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  @@unique([businessId, date])
+}
+
+model ConversationSession {
+  id         String   @id @default(uuid()) @db.Uuid
+  businessId String   @db.Uuid
+  customerId String?  @db.Uuid
+  language   Language
+  channel    String   @default("TEXT")
+  status     String   @default("ACTIVE")
+  state      Json     @default("{}")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  messages   ConversationMessage[]
+  @@index([businessId, createdAt])
+}
+
+model ConversationMessage {
+  id        String   @id @default(uuid()) @db.Uuid
+  sessionId String   @db.Uuid
+  role      String
+  content   String
+  createdAt DateTime @default(now())
+  session   ConversationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  @@index([sessionId, createdAt])
+}
+
+model Notification {
+  id            String             @id @default(uuid()) @db.Uuid
+  businessId    String             @db.Uuid
+  appointmentId String             @db.Uuid
+  channel       String             @default("WHATSAPP")
+  message       String
+  manualUrl     String
+  status        NotificationStatus @default(SIMULATED)
+  providerId    String?
+  createdAt     DateTime           @default(now())
+  business      Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  appointment   Appointment        @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  @@index([businessId, createdAt])
+}
+
+model IntegrationConfiguration {
+  id         String       @id @default(uuid()) @db.Uuid
+  businessId String       @db.Uuid
+  provider   ProviderKind
+  enabled    Boolean      @default(false)
+  config     Json
+  business   Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  @@unique([businessId, provider])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @db.Uuid
+  actorId    String?  @db.Uuid
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId, createdAt])
+}
