@@ -133,8 +133,4 @@ app.patch("/business", { preHandler: [app.authenticate] }, async (request) => {
   return db.business.update({ where: { tenantId: claims.tenantId }, data: input });
 });
 
-if (process.env.NODE_ENV !== "test" && !process.env.VERCEL) {
-  await app.listen({ host: "0.0.0.0", port: config.port });
-}
-
 export { app };
