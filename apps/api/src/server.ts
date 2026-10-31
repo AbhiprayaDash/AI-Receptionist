@@ -1,4 +1,4 @@
-import Fastify, { type FastifyRequest } from "fastify";
+import Fastify, { type FastifyError, type FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
 import bcrypt from "bcryptjs";
@@ -23,7 +23,7 @@ declare module "fastify" {
 }
 app.decorate("authenticate", auth);
 
-app.setErrorHandler((error, _request, reply) => {
+app.setErrorHandler((error: FastifyError, _request, reply) => {
   const status = error.name === "ZodError" ? 400 : /not found|unavailable|outside|active|cancelled/i.test(error.message) ? 409 : (error as { statusCode?: number }).statusCode ?? 500;
   if (status >= 500) app.log.error(error);
   reply.code(status).send({ error: error.message });

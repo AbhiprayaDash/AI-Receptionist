@@ -9,11 +9,42 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role { OWNER ADMIN STAFF }
-enum Language { EN HI OR }
-enum AppointmentStatus { CONFIRMED CANCELLED COMPLETED }
-enum NotificationStatus { SIMULATED PENDING SENT DELIVERED FAILED }
-enum ProviderKind { LOCAL_CALENDAR GOOGLE_CALENDAR MOCK_WHATSAPP WHATSAPP_CLOUD OLLAMA STT TTS TELEPHONY }
+enum Role {
+  OWNER
+  ADMIN
+  STAFF
+}
+
+enum Language {
+  EN
+  HI
+  OR
+}
+
+enum AppointmentStatus {
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum NotificationStatus {
+  SIMULATED
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+}
+
+enum ProviderKind {
+  LOCAL_CALENDAR
+  GOOGLE_CALENDAR
+  MOCK_WHATSAPP
+  WHATSAPP_CLOUD
+  OLLAMA
+  STT
+  TTS
+  TELEPHONY
+}
 
 model Tenant {
   id        String   @id @default(uuid()) @db.Uuid

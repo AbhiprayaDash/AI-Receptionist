@@ -51,7 +51,7 @@ export class OllamaProvider implements LLMProvider {
 }
 
 export class MockWhatsAppProvider implements MessagingProvider {
-  async send() { return { status: "SIMULATED" as const }; }
+  async send(_phone: string, _message: string) { return { status: "SIMULATED" as const }; }
 }
 
 export class LocalVoiceCapability {
